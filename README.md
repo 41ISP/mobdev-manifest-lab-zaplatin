@@ -1,362 +1,616 @@
-# Лабораторная: сущность React
+# Лабораторная: оболочка приложения, экран и PWA
 
-Ваша задача выбрать сущность, создать её как коллекцию в Strapi, а затем используя его REST API сделать получение/удаление/создание её через вашу аппку.
+# Вы форкаете прошлую `mobdev-ts-entity-lab` работу и работаете в ней
+
+[MiniPaint](https://viliusle.github.io/miniPaint/)
+
+В первой лабораторной вы сделали сущность, коллекцию в Strapi и приложение, которое показывает, создаёт и удаляет записи. Приложение уже собирается в APK и запускается на телефоне. В рамках этой работы вы будете настраивать свое приложение.
+
+- иконка приложения в лаунчере;
+- splash-экран при запуске;
+- название и описание;
+- размер экрана, viewport, статус-бар и его цвет;
+- PWA функционал
+
+Всё делается для **вашей** сущности. Примеры ниже — на «играх», но иконки, цвета, тексты и скриншоты должны быть про вашу тему.
 
 ## 0. Что дано и что нужно сделать
 
-У вас должно быть:
+Дано:
 
-- список карточек вашей сущности из Strapi (GET);
-- форма, которая создаёт новую запись (POST);
-- кнопка «Удалить» на карточке (DELETE);
-- состояния загрузки, ошибки и пустого списка;
+- React + Vite приложение с вашей сущностью;
+- Capacitor и папка `android/` (из предыдущей лабы);
 
-Всё это делается для **ВАШЕЙ** сущности.
+_Не забудьте, что если вы сделали коммит после того, как собрали проект для Pages - у вас указан baseURL в проекте, который будет ломать Vite сборщик в Codespace и приложение на телефоне_
 
 ## 1. Подготовка
 
-1. Создайте `.env` по образцу `.env.example` и добавьте ключ:
+### 1.1. Пакеты
+
+В корне проекта:
+
+```bash
+npm i @capacitor/splash-screen
+npm i -D @capacitor/assets
+npx cap sync
+```
+
+- `@capacitor/splash-screen` — управляет splash-экраном.
+- `@capacitor/assets` — генерирует иконки и splash из исходников. Работает без Android Studio.
+- `SystemBars` для системных полос уже входит в `@capacitor/core` — отдельный пакет не нужен.
+
+Если `android/` ещё нет — значит у вас не попала настройка проекта `android` с прошлой пары в коммит. Вернитесь и соберите `apk`, а потом продолжите с шага 1.1.
+
+### 1.2. Исходники ассетов
+
+Создайте в корне папку `assets/`. В ней — исходники **в большом размере**, отрисуйте исходники через MiniPaint (ссылка выше).
+
+Рекомендуемый вариант (полный контроль):
 
 ```
-VITE_API_URL=...
-VITE_API_KEY=...
+assets/
+├── icon-only.png          # 1024×1024, обычная иконка
+├── icon-foreground.png    # 1024×1024, прозрачный фон, логотип с отступами
+├── icon-background.png    # 1024×1024, фон adaptive-иконки
+├── splash.png             # 2732×2732, светлая тема
+└── splash-dark.png        # 2732×2732, тёмная тема
 ```
 
-2. Переименуйте `EntityCard` и `EntityForm` под свою сущность (например, `RecipeCard`, `RecipeForm`). Заголовок «Мои сущности» и подписи в верстке замените на свои.
+Простой вариант (одна картинка):
 
-## 2. Выберите сущность и набор полей
+```
+assets/
+├── logo.png
+└── logo-dark.png
+```
 
-Придумайте сущность: фильм, рецепт, питомец, книга, задача, товар, трек, курс, тренировка. Рецепты брать нельзя.
+_Будет получено меньше баллов, если реализовать не все ассеты_
 
-В сущности должно быть **минимум 8 полей**, желательно использовать как можно больше типов:
+Требования к исходникам:
 
-| Вид поля                      | Пример (Рецепт)        | Тип в Strapi      |
-| ----------------------------- | ---------------------- | ----------------- |
-| Строка                        | `title`                | Text → Short text |
-| Длинный текст                 | `description`          | Text → Long text  |
-| Целое число                   | `cookingTime` (минуты) | Number → integer  |
-| Дробное число                 | `price`                | Number → decimal  |
-| Один вариант из списка        | `difficulty`           | Enumeration       |
-| Дата                          | `addedAt`              | Date → date       |
-| Да/нет                        | `isVegan`              | Boolean           |
-| Несколько вариантов из списка | `tags`                 | JSON              |
+- Только PNG. (По-хорошему должен быть SVG, но это сложнее реализовать с нашим софтом)
+- `icon-only` и слои adaptive — не меньше 1024×1024.
+- splash — не меньше 2732×2732, иначе на больших экранах будет мыло.
+- В `icon-foreground` логотип должен занимать примерно центральные 60–70% холста: Android обрежет края.
+- В splash не должно быть текста и мелких деталей: он показывается 0,5–2 секунды.
 
-## 3. Strapi
+### 1.3. Генерация
 
-Наш Strapi сервер - https://strapi.kitek-pg.ru/ 
+Для полного варианта:
 
-Вам надо зайти под вашим пользователем перед тем, как выполнять шаги ниже. Если у вас нет пользователя узнайте у меня креды от общего админа.
+```bash
+npx @capacitor/assets generate --android
+```
 
-Создайте Collection type с вашими полями и API-токен.
+Что появится в `android/app/src/main/res/`:
 
-- **Избегайте Rich text (Blocks).** Rich text (Blocks) приходит массивом блоков, а в форме обычный `textarea`, поэтому поле `Text → Long text`, и приходит оно обычной строкой.
-- **Enumeration:** значения пишите латиницей, без пробелов и не начиная с цифры (`easy`, `medium`, `hard`). Русские подписи будут храниться во фронтенде, а не в Strapi.
-- **Несколько вариантов из списка** хранятся в поле `JSON` как массив строк: `["vegan", "quick"]`.
-- **Дата:** тип `date` (не `datetime`). Приходит строкой вида `"2025-05-12"`.
-- Integer и decimal это **разные** поля: в integer сервер не примет `1.5`.
-- Права токена: Settings → API Tokens. Нужны `find`, `create` и `delete` на вашу коллекцию. Там же возьмите токен.
-- Заполните 3-4 тестовые записи в админке, включая картинку, чтобы было что рисовать.
+| Что                  | Куда                                                                              |
+| -------------------- | --------------------------------------------------------------------------------- |
+| Обычные иконки       | `mipmap-mdpi/…/ic_launcher.png` и остальные плотности                             |
+| Круглые иконки       | `mipmap-*/ic_launcher_round.png`                                                  |
+| Adaptive-иконка      | `mipmap-anydpi-v26/ic_launcher.xml`                                               |
+| Слои adaptive-иконки | `mipmap-*/ic_launcher_foreground.png`, `ic_launcher_background.png`               |
+| Splash               | `drawable/splash.png`, `drawable-land-*/splash.png`, `drawable-port-*/splash.png` |
+| Тёмный splash        | `drawable-night*/splash.png`                                                      |
 
-Если мы не на Красном Пути - попробуйте забрать ответ от сервера ваших сущностей через Bruno: отправьте запрос на `https://strapi.kitek-pg.ru/api/<ваши-сущности-во-множественном-числе>?populate=*` с заголовком `Authorization: Bearer <токен>`.
+## 2. Иконка
 
-## 4. Типы: `types.ts`
+### 2.1. Как Android рисует иконку
 
-Типы ручками писать не обязательно, можете просто копировать из Bruno и прогонять через [конвертер](https://transform.tools/json-to-typescript). Главное потом переименуйте их в правильные интерфейсы.
+На Android одновременно есть несколько видов иконок:
 
-### 4.1 Системные поля Strapi
+| Вид                               | Когда используется                             |
+| --------------------------------- | ---------------------------------------------- |
+| Обычная PNG (`ic_launcher`)       | старые версии и некоторые лаунчеры             |
+| Adaptive icon (`ic_launcher.xml`) | Android 8+                                     |
+| Круглая (`ic_launcher_round`)     | лаунчеры, которые просят круг                  |
+| Monochrome / themed icon          | Android 13+, если включены тематические иконки |
 
-Strapi сам добавляет в каждую запись `id` (number), `documentId` (string), `createdAt`, `updatedAt` (строки) и `publishedAt` (если включён Draft & Publish). В интерфейсе они нужны, но в форме вы их не вводите. Для удаления записи понадобится именно `documentId`, а не `id`.
+Adaptive-иконка — это не одна картинка, а два слоя:
 
-### 4.2 Как поле Strapi становится типом TypeScript
+- `background` — фон (цвет или картинка);
+- `foreground` — логотип.
 
-| Поле в Strapi  | Что приходит в JSON | Тип в TS              |
-| -------------- | ------------------- | --------------------- |
-| Short text     | `"Борщ"`            | `string`              |
-| Long text      | строка или `null`   | `string` или `null`   |
-| Integer        | `45`                | `number`              |
-| Decimal        | `4.5`               | `number`              |
-| Enumeration    | `"easy"`            | union из значений     |
-| Date           | `"2025-05-12"`      | `string`              |
-| Boolean        | `true`              | `boolean`             |
-| JSON (массив)  | `["vegan"]`         | массив union: `Tag[]` |
-| Media (single) | объект или `null`   | `IMedia` или `null`   |
+Система сама режет их под форму лаунчера: круг, квадрат со скруглением, «капля» и т.д. Поэтому важно оставлять отступы.
 
-Если поле необязательное и не заполнено, Strapi пришлёт `null` для любого типа (в том числе для чисел). Тогда в интерфейсе пишите `number | null` или используете необязательное поле `isVegan?: boolean`
+Размеры: холст **108×108 dp**, видимая область примерно **72×72 dp**, безопасный круг — около **66 dp** по диаметру. Если логотип залезает в края, на круглом лаунчере он обрежется.
 
-### 4.3 Enumeration: union вместо `string`
+### 2.2. Adaptive-иконка
 
-Если описать enumeration как `difficulty: string`, TypeScript не заметит опечатку вроде `"esay"`. Поэтому список значений описывается **один раз**, а тип, `select` в форме и подписи в карточке берутся из него:
+После генерации откройте:
+
+```
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+```
+
+Там должно быть примерно так:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+```
+
+Если вы используете простой вариант с `logo.png`, инструмент создаст эти файлы сам. Руками их пишут только при тонкой настройке.
+
+### 2.3. Монохромная иконка (Android 13+)
+
+Тематические иконки — это когда система перекрашивает иконку под обои. Для них нужен третий слой — `monochrome`.
+
+`@capacitor/assets` его **не генерирует**, его нужно добавить самому.
+
+Слой `monochrome` — это обычный drawable, поэтому делаем его из PNG: без вектора, `pathData` и трассировки.
+
+1. Подготовьте PNG-силуэт логотипа:
+   - возьмите `icon-foreground.png` или `icon-only.png`;
+   - уберите фон и оставьте одну форму: в miniPaint переведите изображение в чёрно-белое (`Desaturate` → `Levels`/`Threshold`), выделите фон волшебной палочкой и удалите его;
+   - снаружи должна быть прозрачность, внутри — сплошная заливка. Цвет не важен: система сама перекрасит слой в цвет темы, важен только альфа-канал.
+
+2. Сохраните файл размером 432×432 px (это 108 dp на xxxhdpi) в:
+
+   ```
+   android/app/src/main/res/drawable-xxxhdpi/ic_launcher_monochrome.png
+   ```
+
+   Логотип держите в центральном круге примерно 264 px (66 dp): Android обрежет края по маске иконки.
+
+3. Добавьте слой в `ic_launcher.xml`:
+
+   ```xml
+   <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+       <background android:drawable="@mipmap/ic_launcher_background" />
+       <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+       <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+   </adaptive-icon>
+   ```
+
+4. Повторите то же для `ic_launcher_round.xml`, если он есть.
+
+5. Пересоберите APK и проверьте пока в Codespace
+
+Важно: повторный запуск `@capacitor/assets` перезапишет `ic_launcher.xml` и удалит `<monochrome>`. PNG-файл останется, а строку в XML нужно добавить заново. Поэтому слой делают **после** генерации.
+
+На Android 12 и ниже тег `<monochrome>` игнорируется, поэтому его обычно добавляют в тот же `mipmap-anydpi-v26/ic_launcher.xml`. Показывают themed icons не все лаунчеры — отсутствие эффекта на скриншоте не всегда ошибка.
+
+### 2.4. Проверка иконки
+
+Соберите APK:
+
+```bash
+(cd android && ./gradlew assembleDebug)
+```
+
+Посмотрите метаданные:
+
+```bash
+$ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging \
+  android/app/build/outputs/apk/debug/app-debug.apk | head -40
+```
+
+В выводе должны быть:
+
+- `package: name='...'` — ваш `applicationId`;
+- `application-label:'...'` — имя под иконкой;
+- `application-icon-…` — пути к иконкам;
+- `sdkVersion` и `targetSdkVersion`.
+
+Проверьте, что в APK лежат нужные файлы:
+
+```bash
+unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -E 'mipmap|drawable.*splash'
+```
+
+Если иконка не обновилась, это не баг сборки, а кэш лаунчера. Помогает: переустановить приложение, перезагрузить телефон, очистить кэш лаунчера.
+
+## 3. Splash-экран
+
+### 3.1. Как это работает на Android 12+
+
+Начиная с Android 12 система показывает **свой** splash-экран при запуске приложения:
+
+- фон берётся из темы;
+- иконка — иконка приложения (или то, что указано в теме);
+- отключить системный splash нельзя;
+- после него показывается WebView с вашим приложением.
+
+Capacitor использует библиотеку `androidx.core:core-splashscreen`, чтобы то же поведение было и на Android 11 и ниже.
+
+Что это значит на практике:
+
+- «сделать splash без статус-бара» на Android 12+ нельзя — системный splash рисует система;
+- `backgroundColor`, `androidScaleType`, `showSpinner`, `splashFullScreen`, `splashImmersive` из конфига **не работают при старте** на Android 12+;
+- эти параметры работают для программного `SplashScreen.show()` и на старых версиях.
+
+Поэтому на Android 12+ внешний вид запуска задаётся **темой и ресурсами**, а не только конфигом плагина.
+
+### 3.2. Настройка плагина
+
+В `capacitor.config.ts`:
 
 ```ts
-export const DIFFICULTIES = ["easy", "medium", "hard"] as const
-export type Difficulty = (typeof DIFFICULTIES)[number]
-// "easy" | "medium" | "hard"
+/// <reference types="@capacitor/splash-screen" />
 
-export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-    easy: "Легко",
-    medium: "Средне",
-    hard: "Сложно",
+import type { CapacitorConfig } from '@capacitor/cli'
+
+const config: CapacitorConfig = {
+    appId: 'ru.example.games',
+    appName: 'Мои игры',
+    webDir: 'dist',
+    backgroundColor: '#f5efe3',
+    plugins: {
+        SplashScreen: {
+            launchShowDuration: 1200,
+            launchAutoHide: true,
+            launchFadeOutDuration: 300,
+            backgroundColor: '#f5efe3',
+            androidScaleType: 'CENTER_CROP',
+            showSpinner: false,
+        },
+    },
 }
+
+export default config
 ```
 
-Почему так:
+| Параметр                | Что делает                            |
+| ----------------------- | ------------------------------------- |
+| `launchShowDuration`    | сколько миллисекунд показывать splash |
+| `launchAutoHide`        | скрывать автоматически                |
+| `launchFadeOutDuration` | длительность исчезновения (Android)   |
+| `backgroundColor`       | фон вокруг картинки                   |
+| `androidScaleType`      | как вписать картинку                  |
+| `showSpinner`           | показывать ли спиннер                 |
 
-- `as const` делает массив неизменяемым кортежем литералов, а `(typeof DIFFICULTIES)[number]` достаёт из него union.
-- `Record<Difficulty, string>` требует подписать **каждое** значение. Добавили `"expert"` в массив и не подписали, получите ошибку компиляции.
-- Для JSON-массива делайте то же самое: `TAGS`, `Tag`, `TAG_LABELS`, а в интерфейсе `tags: Tag[]`.
+### 3.3. Тема, цвета и тёмный splash
 
-### 4.4 Тип данных для отправки формы
+Откройте:
 
-При создании вы отправляете только то, что ввёл пользователь. Второй интерфейс вручную не пишите, выведите его из первого:
-
-```ts
-export type IRecipeInput = Omit<
-    IRecipe,
-    "id" | "documentId" | "createdAt" | "updatedAt" | "publishedAt" | "image"
->
+```
+android/app/src/main/res/values/styles.xml
 ```
 
-Удалите поле из `IRecipe`, и оно пропадёт из `IRecipeInput`: TypeScript подсветит все места, где вы на него ссылались.
+Там есть тема запуска:
 
-## 5. API и стор
+```xml
+<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+    <item name="android:background">@drawable/splash</item>
+</style>
+```
 
-Для своей сущности нужно сделать следующее:
+Добавьте цвет фона:
 
-1. В `api.ts` создайте `apiInstance` (`baseURL` и заголовок `Authorization: Bearer ...`) и экспортируйте `API_URL`.
-2. Напишите три ручки и соберите их в объект `api`: получить список (GET, с `populate` для картинки), создать (POST), удалить (DELETE).
-3. Создайте стор своей сущности (например, `useRecipesStore`) с данными и методами для всех трёх ручек.
+`values/colors.xml`:
 
-На что обратить внимание:
+```xml
+<resources>
+    <color name="splashBackground">#F5EFE3</color>
+</resources>
+```
 
-- **POST:** тело запроса всегда оборачивается в `data`: `apiInstance.post<IStrapiResponse<IRecipe>>("/recipes", { data: input })`. Без обёртки Strapi ответит ошибкой 400.
-- **DELETE:** адрес вида `/recipes/<documentId>`. Берите именно `documentId` (строка), а не числовой `id`. Ответ пустой, поэтому тип ответа не описывается.
-- Методы стора, которые ходят в сеть, асинхронные. Описывайте их как `() => Promise<void>`, а не `() => void`, иначе `await` в компоненте с точки зрения типов ничего не ждёт.
-- После POST и DELETE список должен обновиться.
-- Ошибки ловите в `try/catch` и показывайте пользователю. Причина ошибки 400 лежит в `error.response.data.error.message`, а `axios.isAxiosError(error)` сужает тип `unknown` до ошибки axios.
+`values/styles.xml`:
 
-## 6. Отрисовка
+```xml
+<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+    <item name="android:background">@drawable/splash</item>
+    <item name="windowSplashScreenBackground">@color/splashBackground</item>
+</style>
+```
 
-### 6.1 Каркас `App`
+`windowSplashScreenBackground` — это фон системного splash на Android 12+.
 
-На странице в каждый момент должно быть видно **ровно одно** из четырёх состояний: загрузка, ошибка, пустой список, список карточек.
+Для тёмной темы создайте `values-night/colors.xml`:
 
-- Загрузку запускайте в `useEffect` с пустым массивом зависимостей.
-- В тексте ошибки выводите саму причину, а не общую фразу.
-- Счётчик в шапке: либо длина массива, либо `meta.pagination.total`.
+```xml
+<resources>
+    <color name="splashBackground">#211D18</color>
+</resources>
+```
 
-### 6.2 Как показывать каждый тип
+Тёмная картинка splash генерируется из `splash-dark.png` и попадает в `drawable-night*/`. Если её нет, на тёмной теме останется светлый фон.
 
-| Тип поля                          | Как рисовать                 | Пример                                                                     | На что обратить внимание                                                       |
-| --------------------------------- | ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Строка                            | текст как есть               | `<h3>{title}</h3>`                                                         | главное строковое поле идёт в заголовок                                        |
-| Длинный текст (может быть `null`) | только если он есть          | `{description && <p className="card__desc">{description}</p>}`             | для строк `&&` безопасен                                                       |
-| Целое число                       | число и единицы              | `{cookingTime} мин`                                                        | см. ловушку с нулём в 6.4                                                      |
-| Дробное число                     | фиксированное число знаков   | `{price.toFixed(2)} €`                                                     | `toFixed` есть только у `number`, перед ним нужна проверка на `null`           |
-| Enumeration                       | подпись из словаря           | `{DIFFICULTY_LABELS[difficulty]}`                                          | иначе пользователь увидит служебное `easy`                                     |
-| Дата                              | форматирование               | `{new Date(addedAt).toLocaleDateString("ru-RU")}`                          | сырая строка `2025-05-12` выглядит как баг                                     |
-| Boolean                           | текст по условию             | `{isVegan ? "да" : "нет"}`                                                 | `{isVegan}` ничего не выведет: React не рисует `true` и `false`                |
-| Массив значений                   | `map` с `key`                | `{tags.map((t) => <span key={t} className="chip">{TAG_LABELS[t]}</span>)}` | значения тегов уникальны, их можно брать как `key`                             |
-| Число-диапазон                    | бейдж                        | `<b className="card__badge">{rating}</b>`                                  | оценка 0 тоже валидна                                                          |
-| Картинка                          | `<img>` с запасным вариантом | см. 6.3                                                                    | `url` относительный, нужен `API_URL`; без `populate` картинка не придёт совсем |
+## 4. Имя и описание
 
-### 6.3 Карточка по блокам верстки
+### 4.1. Имя под иконкой
 
-Верстка `EntityCard` разбита на блоки. Для каждого блока решите, какое поле туда пойдёт:
+Имя приложения в ОС берётся не из `capacitor.config.ts`, а из ресурсов Android:
 
-- **`card__cover`**: картинка, а если её нет, первая буква названия (`title.charAt(0)`). В верстке сейчас стоят и `img`, и `span`, нужно показывать **одно из двух**, а не оба. Тут же бейдж `card__badge` с числом (оценка, количество).
-- **`card__body`**: заголовок `h3`, длинный текст `card__desc`, строки `card__meta` (по одной на пару «подпись: значение», например категория, дата, boolean) и `chips` для массива значений.
-- **`card__footer`**: главное число (цена и т.п.) и кнопка «Удалить».
+```
+android/app/src/main/res/values/strings.xml
+```
+
+```xml
+<resources>
+    <string name="app_name">Мои игры</string>
+    <string name="title_activity_main">Мои игры</string>
+</resources>
+```
+
+- `app_name` — подпись под иконкой и в настройках.
+- `title_activity_main` — заголовок Activity, может использоваться в «недавних».
+
+`appName` в `capacitor.config.ts` используется при создании проекта (`cap add android`). Если поменять его позже, Android сам не переименуется — правьте `strings.xml`.
 
 Правила:
 
-- Блок под поле, которого нет в вашей сущности, удаляйте. Нужны два поля одного вида: копируйте блок.
-- Для `alt` у картинки используйте запасной вариант: `image.alternativeText ?? title`.
-- Пропсы карточки типизируйте на основе вашего интерфейса (например, `interface IRecipeCard extends IRecipe`) и добавьте `onDelete`. Кнопка вызывает его с `documentId`.
-- В списке `key` берите из `documentId`.
+- имя должно быть коротким: длинное обрезается в лаунчере;
+- без эмодзи и спецсимволов;
+- имя и иконка должны читаться вместе.
 
-## 7. Форма: настройка инпутов
+### 4.2. Локализация имени
 
-### 7.1 Как устроена форма
+Если хотите русское и английское имя, создайте:
 
-Все поля формы **управляемые**: значение берётся из состояния (`value` или `checked`), а любое изменение записывается обратно в состояние (`onChange`). Под каждое поле создайте отдельный стейт (не забудьте его типизировать).
-
-### 7.2 Шпаргалка: вид поля, input и значение
-
-| Вид поля         | Что в разметке                    | Что читаем из события          | Тип в состоянии          | Начальное значение        | Поле в Strapi       |
-| ---------------- | --------------------------------- | ------------------------------ | ------------------------ | ------------------------- | ------------------- |
-| Строка           | `input type="text"`               | `e.target.value`               | `string`                 | `""`                      | Short text          |
-| Длинный текст    | `textarea`                        | `e.target.value`               | `string`                 | `""`                      | Long text           |
-| Целое число      | `input type="number" step={1}`    | `Number(e.target.value)`       | `number`                 | `0`                       | integer             |
-| Дробное число    | `input type="number" step={0.01}` | `Number(e.target.value)`       | `number`                 | `0`                       | decimal             |
-| Диапазон         | `input type="range"`              | `Number(e.target.value)`       | `number`                 | значение внутри диапазона | integer или decimal |
-| Дата             | `input type="date"`               | `e.target.value`               | `string`                 | сегодняшняя дата          | date                |
-| Список           | `select` и `option`               | `e.target.value as Difficulty` | union                    | первое значение массива   | enumeration         |
-| Группа чекбоксов | несколько `input type="checkbox"` | своя функция `toggle`          | массив, например `Tag[]` | `[]`                      | JSON                |
-| Один чекбокс     | `input type="checkbox"`           | `e.target.checked`             | `boolean`                | `false`                   | boolean             |
-
-### 7.3 Каждый вид input подробно
-
-#### Строка
-
-```tsx
-<label className="field">
-    Название
-    <input
-        type="text"
-        required
-        value={form.title}
-        onChange={(e) => setField("title", e.target.value)}
-    />
-</label>
+```
+android/app/src/main/res/values-ru/strings.xml
 ```
 
-- Если поле обязательное в Strapi, ставьте `required`: браузер не даст отправить пустую форму.
-- Если в Strapi у поля задана максимальная длина, повторите её в `maxLength`.
-
-#### Длинный текст
-
-```tsx
-<textarea
-    rows={3}
-    value={form.description ?? ""}
-    onChange={(e) => setField("description", e.target.value)}
-/>
+```xml
+<resources>
+    <string name="app_name">Мои игры</string>
+    <string name="title_activity_main">Мои игры</string>
+</resources>
 ```
 
-- У `textarea` значение передаётся через `value`, а не между тегами, как в HTML.
+а в `values/strings.xml` — английское. Язык системы выберет нужный файл.
 
-#### Целое число
+### 4.3. Описание для PWA
 
-```tsx
-<input
-    type="number"
-    min={0}
-    step={1}
-    value={form.cookingTime}
-    onChange={(e) => setField("cookingTime", Number(e.target.value))}
-/>
-```
+В `public/manifest.webmanifest` есть поле `description`. Оно не показывается в лаунчере, но используется при установке, в некоторых браузерах и в поиске:
 
-- `Number(...)` обязателен: без него в состояние попадёт строка, и TypeScript выдаст ошибку.
-- `step={1}` задаёт шаг стрелок, но **не запрещает** вписать руками `1.5`. Сервер для integer ответит ошибкой 400, поэтому такой ввод нужно отсечь самим (например, `Number.isInteger`).
-- `min` и `max` подсказывают браузеру допустимые границы и проверяются при отправке, но только вместе с `required`. Повторите в них ограничения, заданные в Strapi.
-- Когда вы стираете число, поле показывает `0`: `Number("")` даёт `0`.
-
-#### Дробное число
-
-Это тот же `type="number"`, но с шагом, подходящим под данные:
-
-- деньги: `step={0.01}`;
-- любое количество знаков: `step="any"`.
-
-Браузер может показывать запятую, но в `e.target.value` значение приходит с точкой, так что `Number` справится. Не путайте с integer: это отдельные поля в Strapi.
-
-#### Диапазон
-
-```tsx
-<label className="field">
-    <span>Оценка: {form.rating}</span>
-    <input
-        type="range"
-        min={0}
-        max={10}
-        step={0.5}
-        value={form.rating}
-        onChange={(e) => setField("rating", Number(e.target.value))}
-    />
-</label>
-```
-
-- Ползунок сам число не показывает. Выведите текущее значение рядом, для этого в верстке и стоит `span`.
-- `min`, `max` и `step` должны совпадать с ограничениями поля в Strapi (Minimum и Maximum value).
-- Начальное значение должно лежать внутри диапазона.
-
-#### Дата
-
-```tsx
-<input
-    type="date"
-    required
-    value={form.addedAt}
-    onChange={(e) => setField("addedAt", e.target.value)}
-/>
-```
-
-- Такой input отдаёт строку вида `2025-05-12`. Это ровно тот формат, который ждёт поле `date` в Strapi, поэтому **ничего ... не нужно**. Не оборачивайте значение в `new Date`.
-
-#### Выпадающий список
-
-```tsx
-<select
-    value={form.difficulty}
-    onChange={(e) => setField("difficulty", e.target.value as Difficulty)}
->
-    {DIFFICULTIES.map((d) => (
-        <option key={d} value={d}>
-            {DIFFICULTY_LABELS[d]}
-        </option>
-    ))}
-</select>
-```
-
-- `option` не пишутся вручную: они строятся через `map` из массива в `types.ts`. Так список в форме никогда не разойдётся с типом.
-- В `value` у `option` лежит значение для Strapi (`easy`), а между тегами подпись для пользователя (`Легко`).
-- `as Difficulty` нужен, потому что `e.target.value` это `string`, а `setField` ждёт union. Здесь приведение уместно: значения берутся из массива, других быть не может.
-- Начальное значение должно быть одним из значений списка, а не пустой строкой.
-
-#### Группа чекбоксов (массив значений)
-
-Самый сложный инпут. Состояние здесь массив, а `checked` каждого чекбокса вычисляется из него.
-
-Под группу выделяется 1 стейт, который будет иметь значение похожее на `["mexican", "native"]`
-
-```tsx
-function toggle<T>(list: T[], item: T): T[] {
-    return list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
+```json
+{
+    "name": "Мои игры",
+    "short_name": "Игры",
+    "description": "Каталог игр: жанр, платформа, год выпуска и рейтинг"
 }
-
-<fieldset>
-    <legend>Теги</legend>
-    {TAGS.map((t) => (
-        <label key={t} className="check">
-            <input
-                type="checkbox"
-                checked={form.tags.includes(t)}
-                onChange={() => setField("tags", toggle(form.tags, t))}
-            />
-            {TAG_LABELS[t]}
-        </label>
-    ))}
-</fieldset>
 ```
 
-- `toggle<T>` это generic-функция: она работает с массивом любого типа.
-- Событие `e` здесь не нужно: по нажатию значение либо добавляется, либо убирается.
-- Strapi в поле JSON принимает массив как есть.
-- Если Strapi нужна хотя бы одна галочка, проверьте длину массива перед отправкой.
+`short_name` — то, что видно под иконкой на домашнем экране. Держите его короче 12 символов.
 
-#### Один чекбокс (boolean)
+Дублируйте описание в `index.html`:
 
-```tsx
-<label className="check">
-    <input
-        type="checkbox"
-        checked={form.isVegan}
-        onChange={(e) => setField("isVegan", e.target.checked)}
-    />
-    Вегетарианское
-</label>
+```html
+<meta
+    name="description"
+    content="Каталог игр: жанр, платформа, год выпуска и рейтинг" />
 ```
 
-Самая частая ошибка: читать `e.target.value`. У чекбокса это всегда строка `"on"`, нужное значение лежит в `e.target.checked`, а в атрибут передаётся `checked`, а не `value`.
+### 4.4. Описание для магазина
 
-#### Картинка
+Даже если вы не публикуете приложение, описание — часть «релиза». В Google Play есть два поля:
 
-...
+- **короткое описание** — до 80 символов, одна строка;
 
-### 7.5 Отправка формы
+## 5. Экран: базовые настройки
 
-- Повесьте `onSubmit` на `<form>` и первой строкой вызовите `e.preventDefault()`, иначе страница перезагрузится. Тип события: `FormEvent<HTMLFormElement>`.
-- Вызовите метод стора для создания с объектом `form`, дождитесь ответа и сбросьте форму: `e.form.reset()`.
-- Пока идёт запрос, кнопка должна быть `disabled`, а её текст «Сохраняем…». Для этого понадобится отдельное состояние, а сброс делайте в `finally`, чтобы кнопка разблокировалась и при ошибке.
-- Ошибка от сервера должна быть видна пользователю.
+Разные версии Android ведут себя по-разному:
+
+| Android | Системные полосы |
+| --- | --- |
+| 14 и ниже | статус-бар можно красить и скрывать, edge-to-edge не обязателен |
+| 15 | edge-to-edge включается принудительно, но остаётся флаг `windowOptOutEdgeToEdgeEnforcement` |
+| 16 | этот флаг убран: приложение всегда рисует под системными полосами |
+
+Подгонять каждую версию отдельно не нужно. В Capacitor 8 есть встроенный `SystemBars`: он сам добавляет отступы под системные полосы, поэтому не нужны ни safe-area в CSS, ни JS-код. Достаточно конфигов.
+
+### 5.1. Viewport
+
+В `index.html`:
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+```
+
+- `width=device-width` — ширина страницы равна ширине экрана, а не 980 px;
+- `initial-scale=1` — без автоматического зума.
+
+`viewport-fit=cover` для базовой настройки не нужен: `SystemBars` сам оставит контент между полосами.
+
+### 5.2. Системные полосы
+
+В `capacitor.config.ts`:
+
+```ts
+const config: CapacitorConfig = {
+    // ...
+    plugins: {
+        SystemBars: {
+            insetsHandling: 'native',
+            style: 'LIGHT',
+        },
+    },
+}
+```
+
+- `insetsHandling: 'native'` — Capacitor сам добавляет отступы под статус-бар и навигацию. Работает и на Android 15/16 с принудительным edge-to-edge.
+- `style: 'LIGHT'` — тёмные иконки для светлого фона; `'DARK'` — светлые иконки для тёмного фона.
+
+Названия стилей относятся к фону, а не к цвету иконок: `'LIGHT'` — светлый фон, `'DARK'` — тёмный. Для светлой темы приложения берите `'LIGHT'`.
+
+`SystemBars` уже входит в `@capacitor/core`, отдельный пакет не нужен. Цвет полосы не задаётся: на Android 15+ она прозрачная, а цвет под ней берётся из фона приложения (`backgroundColor` и фон темы).
+
+### 5.3. Ориентация и клавиатура
+
+В `AndroidManifest.xml` у Activity:
+
+```xml
+<activity
+    android:name=".MainActivity"
+    android:screenOrientation="portrait"
+    android:windowSoftInputMode="adjustResize"
+    ... >
+```
+
+- `screenOrientation` — `portrait`, `landscape`, `sensorPortrait`, `sensorLandscape` или `unspecified`;
+- `windowSoftInputMode="adjustResize"` — клавиатура не закрывает поля формы.
+
+Дополнительный плагин и код не нужны.
+
+## 6. PWA: что это и чем отличается
+
+### 6.1. Определение
+
+**PWA (Progressive Web App)** — это обычный сайт, который:
+
+- имеет `manifest.webmanifest` с именем, иконками и цветами;
+- обслуживается по HTTPS;
+- обычно имеет service worker (для офлайна и кэша);
+- может быть установлен на домашний экран и открываться в отдельном окне без адресной строки.
+
+PWA — это не новый язык и не фреймворк. Это набор соглашений поверх веб-технологий.
+
+### 6.2. Сравнение
+
+|                 | Обычная веб-страница    | PWA                               | Capacitor-приложение     |
+| --------------- | ----------------------- | --------------------------------- | ------------------------ |
+| Где живёт       | вкладка браузера        | вкладка или отдельное окно        | установленное приложение |
+| Установка       | нет                     | «Установить» / «На главный экран» | APK или AAB              |
+| Иконка          | favicon во вкладке      | из `manifest.webmanifest`         | из `res/mipmap-*`        |
+| Splash          | нет                     | частично, через манифест и тему   | `drawable/splash`        |
+| Офлайн          | только с service worker | service worker                    | JS-бандл уже внутри APK  |
+| Доступ к железу | браузерные API          | браузерные API                    | плагины Capacitor        |
+| Обновление      | F5                      | при открытии                      | новый APK или магазин    |
+| Магазин         | нет                     | обычно нет                        | Google Play              |
+| Манифест        | нет                     | `manifest.webmanifest`            | `AndroidManifest.xml`    |
+| Размер          | килобайты               | килобайты                         | десятки мегабайт         |
+
+### 6.3. Два разных манифеста
+
+Это главное, что нужно понять:
+
+- `AndroidManifest.xml` — описывает **нативное** приложение: Activity, permissions, иконку, тему. Его читает Android.
+- `manifest.webmanifest` — описывает **сайт**: имя, иконки, `start_url`, `display`. Его читает браузер.
+
+Capacitor **не читает** `manifest.webmanifest`. Внутри APK работает WebView, а иконку и splash берут из Android-ресурсов. Поэтому PWA-манифест нужен для браузерной версии, а не для APK.
+
+При этом брендинг общий: одни и те же исходники иконок можно использовать и для Android, и для PWA.
+
+### 6.4. Зачем делать PWA, если есть APK
+
+- Пользователь может открыть приложение по ссылке без установки из магазина.
+- На десктопе оно ставится как отдельное окно.
+- Это быстрее, чем объяснять, где скачать APK.
+- Для лабораторной это способ увидеть разницу между «сайт», «PWA» и «нативное приложение».
+
+### 6.5. Условия установки
+
+Chrome устанавливает PWA, если:
+
+- сайт открыт по HTTPS (или на `localhost`);
+- есть манифест с `name`/`short_name`, `start_url`, `display` и иконками;
+- есть иконки 192×192 и 512×512;
+- пользователь провёл на сайте немного времени (Chrome может не показывать кнопку сразу).
+
+## 7. Настройка PWA
+
+### 7.1. Манифест
+
+Создайте `public/manifest.webmanifest`:
+
+```json
+{
+    "name": "Мои игры",
+    "short_name": "Игры",
+    "description": "Каталог игр: жанр, платформа, год выпуска и рейтинг",
+    "lang": "ru",
+    "dir": "ltr",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#f5efe3",
+    "theme_color": "#2f6b4f",
+    "icons": [
+        {
+            "src": "pwa-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "pwa-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "maskable-icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
+```
+
+Поля:
+
+| Поле               | Зачем                                              |
+| ------------------ | -------------------------------------------------- |
+| `name`             | полное имя при установке                           |
+| `short_name`       | подпись под иконкой                                |
+| `description`      | описание для установки и поиска                    |
+| `start_url`        | с какой страницы открывать                         |
+| `scope`            | какие страницы считаются приложением               |
+| `display`          | `standalone` — со статус-баром, `fullscreen` — без |
+| `orientation`      | предпочтительная ориентация                        |
+| `theme_color`      | цвет панели браузера и системной полосы            |
+| `background_color` | фон при запуске                                    |
+| `icons`            | иконки, включая `maskable`                         |
+
+Обратите внимание: `display: "standalone"` оставляет статус-бар, `display: "fullscreen"` убирает и его. Это PWA-аналог «со статусом / без статуса».
+
+### 7.2. Иконки для PWA
+
+Иконки для PWA лежат в `public/`. Всё, что там находится, Vite копирует в `dist/` как есть. Не путайте эту папку с `dist/assets/`, куда Vite складывает собранный JS и CSS.
+
+Самый предсказуемый способ — `@vite-pwa/assets-generator`. Положите исходник в `public/logo.png` (можно взять `assets/icon-only.png`):
+
+```bash
+npm i -D @vite-pwa/assets-generator
+npx pwa-assets-generator --preset minimal-2023 public/logo.png
+```
+
+Он сделает из одного логотипа:
+
+```
+public/
+├── favicon.ico
+├── pwa-64x64.png
+├── pwa-192x192.png
+├── pwa-512x512.png
+├── maskable-icon-512x512.png
+└── apple-touch-icon-180x180.png
+```
+
+`logo.png` — исходник не меньше 512×512, лучше 1024×1024.
+
+### 7.3. Подключение манифеста
+
+В `index.html`:
+
+```html
+<link rel="manifest" href="./manifest.webmanifest" />
+<meta name="theme-color" content="#2f6b4f" />
+<link rel="apple-touch-icon" href="./apple-touch-icon-180x180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+```
+
+`apple-*` теги нужны для iOS: Safari не всё берёт из манифеста.
+
+## 8. Соберите приложение
+
+Соберите APK по инструкции из прошлых работ (_Не забудьте, что у вас уже инициализирован `android` в `capacitor`, вам надо просто напросто собрать приложение через `vite` и синхронизировать его с Android пакетом_)
+
+# Как сдавать
+
+- Создайте форк репозитория в вашей организации с названием-этого-репозитория-вашафамилия
+- Используя ветку wip сделайте задание
+- Соберите APK файл, поместите его в корень
+- Зафиксируйте изменения в вашем репозитории
+- Когда документ будет готов - создайте пул реквест из ветки wip (вашей) на ветку main (тоже вашу) и укажите меня (ktkv419) как reviewer
+
+Не мержите сами коммит, это сделаю я после проверки задания
